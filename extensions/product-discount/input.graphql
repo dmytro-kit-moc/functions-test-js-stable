@@ -1,0 +1,19 @@
+query Input {
+    cart {
+        lines {
+            quantity
+            merchandise {
+                __typename
+                ...on ProductVariant {
+                    id
+                }
+            }
+        }
+    }
+
+    discountNode {
+        metafield(namespace: "zpa", key: "zp-discount-config") {
+            value
+        }
+    }
+}

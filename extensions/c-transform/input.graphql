@@ -1,0 +1,25 @@
+query Input {
+  cart {
+    attribute(key: "zpBundles") {
+      key
+      value
+    }
+    lines {
+      id
+      quantity
+      attribute(key: "zpBundleId") {
+        key
+        value
+      }
+      merchandise {
+        __typename
+        ... on ProductVariant {
+          id
+          product {
+            id
+          }
+        }
+      }
+    }
+  }
+}

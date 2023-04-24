@@ -1,0 +1,40 @@
+# Create discount
+
+mutation {
+    discountAutomaticAppCreate(automaticAppDiscount: {
+        title: "Volume discount 1.0",
+        functionId: "01GXQH1X7Q5326WZ26MDS201PP",
+        startsAt: "2022-06-22T00:00:00"
+    }) {
+        automaticAppDiscount {
+            discountId
+        }
+        userErrors {
+            field
+            message
+        }
+    }
+}
+
+# Add metafields to discount
+
+mutation {
+    discountAutomaticAppUpdate(
+        id: "gid://shopify/DiscountAutomaticNode/1102963343518",
+        automaticAppDiscount: {
+            metafields: [
+                {
+                    namespace: "$app:zpa"
+                    key: "zp-discount-config"
+                    value: "{ \"quantity\": 3, \"percentage\": 15.0, \"discountType\": \"fixed\" }"
+                    type: "json"
+                }
+            ]
+        }
+    ) {
+        userErrors {
+            field
+            message
+        }
+    }
+}

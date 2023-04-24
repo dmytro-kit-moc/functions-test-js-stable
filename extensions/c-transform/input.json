@@ -1,0 +1,55 @@
+{
+  "cart": {
+    "attribute": {
+      "key": "zpBundles",
+      "value": "[{\"id\":1,\"rules\":[{\"parent_product_id\":\"100\",\"items\":[{\"id\":\"gid://shopify/Product/6964119208094\",\"quantity\":1}],\"discount\":{\"value\":22,\"discount_type\":\"percentage\"}},{\"parent_product_id\":\"101\",\"items\":[{\"id\":\"gid://shopify/Product/7218516164766\",\"quantity\":2},{\"id\":\"gid://shopify/Product/6964119470238\",\"quantity\":2}],\"discount\":{\"value\":33,\"discount_type\":\"fixed\"}}]}]"
+    },
+    "lines": [
+      {
+        "id": "gid://shopify/CartLine/0",
+        "quantity": 1,
+        "attribute": {
+          "key": "zpBundleId",
+          "value": "2"
+        },
+        "merchandise": {
+          "__typename": "ProductVariant",
+          "id": "gid://shopify/ProductVariant/40799008719006",
+          "product": {
+            "id": "gid://shopify/Product/6964119470238"
+          }
+        }
+      },
+      {
+        "id": "gid://shopify/CartLine/1",
+        "quantity": 2,
+        "attribute": {
+          "key": "zpBundleId",
+          "value": "1"
+        },
+        "merchandise": {
+          "__typename": "ProductVariant",
+          "id": "gid://shopify/ProductVariant/40799008719006",
+          "product": {
+            "id": "gid://shopify/Product/7218516164766"
+          }
+        }
+      },
+      {
+        "id": "gid://shopify/CartLine/2",
+        "quantity": 2,
+        "attribute": {
+          "key": "zpBundleId",
+          "value": "1"
+        },
+        "merchandise": {
+          "__typename": "ProductVariant",
+          "id": "gid://shopify/ProductVariant/40799008719006",
+          "product": {
+            "id": "gid://shopify/Product/6964119470238"
+          }
+        }
+      }
+    ]
+  }
+}
