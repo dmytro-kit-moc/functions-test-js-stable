@@ -49,6 +49,7 @@ struct ZpBundleItemAttr {
 struct SearchResult {
     rule: ZpBundleRule,
     cart_lines: Vec<CartLineInput>,
+    parentProductId: String
 }
 
 #[shopify_function]
@@ -75,14 +76,8 @@ fn function(input: input::ResponseData) -> Result<output::FunctionResult> {
 
             // println!("{:?}", &bundle_cart_lines.get(0).unwrap().merchandise.id);
 
-            let parentVariantId: &str = if let ProductVariant(merchandise) = &bundle_cart_lines.get(0).unwrap().merchandise {
-                &merchandise.id
-            } else {
-                ""
-            };
-
             let merge_operation = MergeOperation {
-                parent_variant_id: parentVariantId.to_string(),
+                parent_variant_id: search_result.parentProductId.to_string(),
                 cart_lines: search_result.cart_lines.clone(),
 
                 title: None,
@@ -163,9 +158,16 @@ fn get_search_results(groups: HashMap<String, Vec<InputCartLines>>, bundle: ZpBu
                     quantity: line.quantity,
                 }).collect();
 
+                let parentVariantId: &str = if let ProductVariant(merchandise) = &cartLines.get(0).unwrap().merchandise {
+                    &merchandise.id
+                } else {
+                    ""
+                };
+
                 results.push(SearchResult {
                     cart_lines: lines,
-                    rule: r
+                    rule: r,
+                    parentProductId: parentVariantId.to_string()
                 });
             }
         });
