@@ -1,4 +1,4 @@
-#![allow(dead_code, unused_variables, unused_imports, unreachable_code)]
+#![allow(dead_code, unused_variables, unused_imports, unreachable_code, non_snake_case)]
 
 use crate::input::InputCart as Cart;
 use crate::input::InputCartAttribute as Attribute;
@@ -16,7 +16,7 @@ use crate::input::InputCartLines;
 use serde::{Deserialize, Serialize};
 use shopify_function::prelude::*;
 use shopify_function::Result;
-use sha2::{Digest, Sha256};
+use std::collections::HashMap;
 
 
 generate_types!(
@@ -29,28 +29,20 @@ type URL = String;
 
 #[derive(Clone, Debug, Deserialize)]
 struct ZpBundle {
-    pub id: usize,
-    pub rules: Vec<ZpBundleRule>,
+    id: usize,
+    rules: Vec<ZpBundleRule>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
 struct ZpBundleRule {
-    pub parent_product_id: String,
-    pub title: Option<String>,
-    pub items: Vec<ZpBundleRuleItem>,
-    pub discount: ZpBundleDiscount
+    productsCount: usize,
+    discount: usize,
 }
 
 #[derive(Clone, Debug, Deserialize)]
-struct ZpBundleRuleItem {
-    pub id: String,
-    pub quantity: usize
-}
-
-#[derive(Clone, Debug, Deserialize)]
-struct ZpBundleDiscount {
-    pub value: usize,
-    pub discount_type: String,
+struct ZpBundleItemAttr {
+    time: String,
+    id: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -62,10 +54,11 @@ struct SearchResult {
 #[shopify_function]
 fn function(input: input::ResponseData) -> Result<output::FunctionResult> {
     let zp_bundles = get_zp_bundles(&input.cart);
-    let mut zp_bundle: ZpBundle = zp_bundles.first().unwrap().clone();
-    let mut bundle_cart_lines: Vec<InputCartLines> = get_bundle_cart_lines(&input.cart, zp_bundle.id);
+    let zp_bundle: ZpBundle = zp_bundles.first().unwrap().clone();
+    let bundle_cart_lines: Vec<InputCartLines> = get_bundle_cart_lines(&input.cart, zp_bundle.id);
+    let groups = group_items_by_time(bundle_cart_lines.clone());
 
-    let search_results: Vec<SearchResult> = check_rules(&mut bundle_cart_lines, &mut zp_bundle.rules);
+    let search_results: Vec<SearchResult> = get_search_results(groups, zp_bundle);
 
     if search_results.is_empty() {
         let no_changes = output::FunctionResult {
@@ -80,35 +73,24 @@ fn function(input: input::ResponseData) -> Result<output::FunctionResult> {
         .map(|search_result| {
             let rule: &ZpBundleRule = &search_result.rule;
 
-            let bundle_title: String = if rule.title.is_some() {
-                rule.title.as_ref().unwrap().to_string()
-            } else {
-                let items_count_str = if rule.items.len() == 1 {
-                    String::from("1 item")
-                } else {
-                    format!("{} items", rule.items.len())
-                };
+            // println!("{:?}", &bundle_cart_lines.get(0).unwrap().merchandise.id);
 
-                format!(
-                    "My custom bundle: {} (-{}% off)",
-                    items_count_str,
-                    rule.discount.value
-                )
+            let parentVariantId: &str = if let ProductVariant(merchandise) = &bundle_cart_lines.get(0).unwrap().merchandise {
+                &merchandise.id
+            } else {
+                ""
             };
 
             let merge_operation = MergeOperation {
-                parent_variant_id: String::from(rule.parent_product_id.to_string()),
-                title: Some(bundle_title),
+                parent_variant_id: parentVariantId.to_string(),
                 cart_lines: search_result.cart_lines.clone(),
 
+                title: None,
                 image: None,
-                // Some(ImageInput {
-                //     url: "https://cdn.shopify.com/s/files/1/0458/3856/5534/products/LEZYNE_PATCH-TOOL_GOLD_WEB_05486981-3d2c-41ff-b73a-18c6fc85d02f.jpg?v=1651743108".to_string()
-                // }),
 
                 price: Some(PriceAdjustment {
                     percentage_decrease: Some(PriceAdjustmentValue {
-                        value: rule.discount.value.to_string(),
+                        value: rule.discount.to_string(),
                     }),
                 }),
             };
@@ -138,9 +120,12 @@ fn get_bundle_cart_lines(cart: &Cart, bundle_id: usize) -> Vec<InputCartLines> {
         .clone()
         .into_iter()
         .filter(move |line| {
-            if let Some(zp_bundle_id_attr) = &line.attribute {
-                let value = zp_bundle_id_attr.value.as_ref().unwrap();
-                return value == &bundle_id.to_string();
+            if let Some(zp_bundle_attr) = &line.attribute {
+                let bundleAttr: ZpBundleItemAttr = serde_json::from_str(zp_bundle_attr.value.as_ref().unwrap()).unwrap();
+
+                // println!("{}, {}", bundleAttr.id, bundle_id);
+
+                return bundleAttr.id == bundle_id;
             }
 
             return false;
@@ -148,118 +133,44 @@ fn get_bundle_cart_lines(cart: &Cart, bundle_id: usize) -> Vec<InputCartLines> {
         .collect();
 }
 
-fn check_rules(bundle_cart_lines: &mut Vec<InputCartLines>, rules: &mut Vec<ZpBundleRule>) -> Vec<SearchResult> {
-    let mut search_results: Vec<SearchResult> = Vec::new();
+fn group_items_by_time(bundle_cart_lines: Vec<InputCartLines>) -> HashMap<String, Vec<InputCartLines>> {
+    let mut groups: HashMap<String, Vec<InputCartLines>> = HashMap::new();
 
-    rules.sort_by(|a, b| b.items.len().cmp(&a.items.len()));
+    bundle_cart_lines.into_iter().for_each(|cart_line| {
+        let line_attr = &cart_line.attribute.clone().unwrap();
+        let value = line_attr.value.as_ref().unwrap();
+        let bundleAttr: ZpBundleItemAttr = serde_json::from_str(value).unwrap();
 
-    for rule in rules.iter() {
-        let mut c_lines: Vec<CartLineInput> = Vec::new();
+        let group = groups.entry(bundleAttr.time).or_insert(vec![]);
+        group.push(cart_line);
+    });
 
-        rule.items.iter().for_each(|item| {
-            let cart_line = bundle_cart_lines
-                .iter()
-                .find(|&line| {
-                    if let ProductVariant(merchandise) = &line.merchandise {
-                        return merchandise.id == item.id && line.quantity >= item.quantity.try_into().unwrap();
-                    }
+    // println!("\n\n {:?} \n\n", groups);
 
-                    return false
-                });
+    groups
+}
 
-            // println!("\n({:?}, \n\n\n {:?} \n\n {:?} ===", item, bundle_cart_lines, cart_line);
+fn get_search_results(groups: HashMap<String, Vec<InputCartLines>>, bundle: ZpBundle) -> Vec<SearchResult> {
+    let mut results: Vec<SearchResult> = Vec::new();
 
-            if cart_line.is_some() {
-                c_lines.push(CartLineInput {
-                    cart_line_id: cart_line.unwrap().id.to_string(),
-                    quantity: item.quantity as i64,
+    groups.iter()
+        .for_each(|(_, cartLines)| {
+            let rule: std::option::Option<ZpBundleRule> = bundle.rules.get(cartLines.len() - 1).cloned();
+
+            if let Some(r) = rule {
+                let lines: Vec<CartLineInput> = cartLines.iter().map(|line| CartLineInput {
+                    cart_line_id: line.id.to_string(),
+                    quantity: line.quantity,
+                }).collect();
+
+                results.push(SearchResult {
+                    cart_lines: lines,
+                    rule: r
                 });
             }
         });
 
-        let is_rule_matched = c_lines.len() == rule.items.len();
+    // println!("\n\n {:?} \n\n", results);
 
-        if is_rule_matched {
-            search_results.push(SearchResult {
-                rule: rule.clone(),
-                cart_lines: c_lines.clone()
-            });
-
-            c_lines.iter().for_each(|line| {
-                let index = bundle_cart_lines.iter().position(|x| *x.id == line.cart_line_id).unwrap();
-                bundle_cart_lines.remove(index);
-            });
-        }
-
-        if bundle_cart_lines.is_empty() {
-            break;
-        }
-    }
-
-    return search_results;
+    results
 }
-
-/*
-    {
-        id: 1,
-        rules: [
-            {
-                parent_product_id: 'gid://shopify/ProductVariant/42539430871198',
-                title: 'All products: -50%',
-
-                items: [
-                    { id: 'gid://shopify/ProductVariant/40799008719006', quantity: 1 },
-                    { id: 'gid://shopify/ProductVariant/41707097620638', quantity: 1 },
-                    { id: 'gid://shopify/ProductVariant/40799008227486', quantity: 1 },
-                    { id: 'gid://shopify/ProductVariant/41707097227422', quantity: 1 },
-                ],
-
-                discount: {
-                    value: 50,
-                    discount_type: 'percentage'
-                }
-            },
-
-            {
-                parent_product_id: 'gid://shopify/ProductVariant/42539430871198',
-
-                items: [
-                    { id: 'gid://shopify/ProductVariant/40799008719006', quantity: 1 },
-                    { id: 'gid://shopify/ProductVariant/40799008227486', quantity: 1 },
-                ],
-
-                discount: {
-                    value: 20,
-                    discount_type: 'percentage'
-                }
-            },
-
-            {
-                parent_product_id: 'gid://shopify/ProductVariant/42539430871198',
-
-                items: [
-                    { id: 'gid://shopify/ProductVariant/41707097620638', quantity: 2 },
-                ],
-
-                discount: {
-                    value: 5,
-                    discount_type: 'percentage'
-                }
-            },
-
-            {
-                parent_product_id: 'gid://shopify/ProductVariant/42539430871198',
-
-                items: [
-                    { id: 'gid://shopify/ProductVariant/41707097620638', quantity: 2 },
-                    { id: 'gid://shopify/ProductVariant/40799008227486', quantity: 1 },
-                ],
-
-                discount: {
-                    value: 15,
-                    discount_type: 'percentage'
-                }
-            },
-        ]
-    }
-*/

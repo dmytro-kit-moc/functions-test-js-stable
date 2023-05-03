@@ -7,7 +7,7 @@ query Input {
     lines {
       id
       quantity
-      attribute(key: "zpBundleId") {
+      attribute(key: "zpBundle") {
         key
         value
       }
@@ -15,9 +15,6 @@ query Input {
         __typename
         ... on ProductVariant {
           id
-          product {
-            id
-          }
         }
       }
     }
